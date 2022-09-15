@@ -1,1 +1,3 @@
-
+-- Explore online retail data
+select * from `formal-cabinet-362516.data_sale.online_retail`
+limit 10

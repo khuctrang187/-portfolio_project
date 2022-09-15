@@ -1,0 +1,52 @@
+with sale_data as
+(
+select *
+from `formal-cabinet-362516.data_sale.online_retail`
+where customerid is not null 
+and quantity > 0
+and unitprice > 0 
+)
+-- 
+, cus_info as
+(
+select customerid cusid 
+  , sum(unitprice) monetory
+  , count(invoiceno) frequently
+  , date_diff(max(date(invoicedate)),min(date(invoicedate)),day) recency
+from sale_data
+group by cusid )
+
+, percent_rank_cus as
+(
+select *
+    , percent_rank() over (order by frequently)  percent_frequently
+    , percent_rank() over (order by recency)  percent_recency
+    , percent_rank() over (order by monetory) percent_monetory
+from cus_info )
+, rfm_score as 
+(
+select * 
+    , if(percent_frequently <= 0.2,1,if(percent_frequently <= 0.4,2,if(percent_frequently <= 0.6,3,if(percent_frequently<=0.8,4,5)))) f_score 
+    ,  if(percent_recency <= 0.2,5,if(percent_recency <= 0.4,4,if(percent_recency <= 0.6,3,if(percent_recency<=0.8,2,1)))) r_score  
+    , if(percent_monetory <= 0.2,1,if(percent_monetory <= 0.4,2,if(percent_monetory <= 0.6,3,if(percent_monetory<=0.8,4,5)))) m_score 
+from percent_rank_cus )
+select * 
+, (f_score + r_score + m_score)/3  cus_score 
+, case
+    when (r_score = 1 and f_score in (1,2) and m_score in (1,2)) or (r_score=2 and f_score=1 and m_score=1) or (r_score=1 and f_score=1 and m_score=3) or (r_score=1 and f_score=3 and m_score=1) then '11. Lost'
+    when  (r_score = 2 and f_score in (2,3) and m_score = 1) or (r_score = 2 and f_score in (1,2) and m_score = 2) or (r_score = 2 and f_score = 1 and m_score = 3)  then '10. Hibernating'
+    when  (r_score = 1 and f_score = 5 and m_score in (4,5)) or (r_score=1 and f_score=4 and m_score=5)  then '9. Can’t Lose Them'
+    when  (r_score in (1,2) and  f_score >= 1 and m_score >= 1) then '8. At Risk'
+    when  (r_score = 3 and f_score in (1,2) and m_score in (1,2)) or (r_score=3 and f_score=1 and m_score=3) or (r_score=3 and f_score=3 and m_score=1) then '7. About to Sleep'
+    when  (r_score = 3 and f_score in (4,5) and m_score =1) or (r_score = 3 and f_score in (3,4) and m_score =2) or (r_score = 3 and f_score in (2,3) and m_score =3) or (r_score = 3 and f_score in (1,2) and m_score =4) or (r_score = 3 and f_score = 1 and m_score =5) then '6. Needing Attention'
+    when  (r_score = 4 and f_score = 1 and m_score = 1) then '5. Promising'
+    when  (r_score = 5 and f_score = 1 and m_score = 1) then '4. Rencent'
+    when  (r_score = 5 and f_score in (5) and m_score in (4,5)) or (r_score=5 and f_score=4 and m_score=5) then '1. Champions' 
+    when (r_score in (4,5) and f_score >= 2 and m_score = 1) or (r_score in (4,5) and f_score in (1,2,3,4) and m_score = 2) or  (r_score in (4,5) and f_score in (1,2,3) and m_score = 3) or (r_score in (4,5) and f_score in (1,2) and m_score = 4) or (r_score in (4,5) and f_score in (1) and m_score = 5) 
+    then '3. Potential Loyalists'
+    when r_score in (3,4,5) and f_score >= 2 and m_score >= 2 then '2. Loyal Customers'
+    else 'Not Define' end segment 
+from rfm_score
+order by monetory desc 
+
+

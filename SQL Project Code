@@ -1,3 +1,46 @@
 -- Explore online retail data
 select * from `formal-cabinet-362516.data_sale.online_retail`
 limit 10
+-- Check missing data
+select * from `formal-cabinet-362516.data_sale.online_retail`
+where customerid is null
+-- 
+with sale as
+(
+select customerid cusid 
+  , date(invoicedate) order_date 
+  , quantity
+from `formal-cabinet-362516.data_sale.online_retail`
+where customerid is not null 
+and quantity > 0
+and unitprice > 0 
+)
+, min_ord as 
+( 
+select 
+  cusid
+  ,min(order_date) first_ord_date 
+from sale 
+group by cusid 
+)
+-- , cohort_analysis as
+  select
+    format_date('%Y-%m',first_ord_date) cohort_month
+    , month_range cohort_index
+    , count( distinct cusid) count_cusid
+    , round(avg(quantity),0) avg_product
+  from 
+  (
+    select 
+      min_ord.cusid 
+      , first_ord_date
+      , order_date
+      , date_diff(order_date, first_ord_date, month) month_range
+      , sale.quantity 
+    from min_ord
+    join sale on min_ord.cusid = sale.cusid
+    order by min_ord.cusid  
+  )  
+  group by cohort_month, cohort_index
+  order by cohort_month desc 
+

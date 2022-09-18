@@ -6,7 +6,7 @@ where customerid is not null
 and quantity > 0
 and unitprice > 0 
 )
--- 
+  -- get customer information (include Monetory: total amount of money , Frequently: total amount of invoice, Recency: number of days since a customer made the last purchase..) 
 , cus_info as
 (
 select customerid cusid 
@@ -15,7 +15,7 @@ select customerid cusid
   , date_diff(max(date(invoicedate)),min(date(invoicedate)),day) recency
 from sale_data
 group by cusid )
-
+  -- use percent_rank() function to calculate SQL Percentile, we get the highest marks equal to 0 and the lowest marks equal to 1.
 , percent_rank_cus as
 (
 select *
@@ -23,6 +23,18 @@ select *
     , percent_rank() over (order by recency)  percent_recency
     , percent_rank() over (order by monetory) percent_monetory
 from cus_info )
+  -- Calculate recency score
+  1.Sort the list of customers id in ascending order of Recency
+  2. Calculate the R scoce according to the 20%
+  (For example, the top is 5 points, the bottom is 1 point)
+  -- calculate frequency score 
+  1.Sort the list of customerid  in ascending order of frequently
+  2. Calculate the F scoce according to the 20%
+  (For example, the top is 1 points, the bottom is 5 point)
+  -- calculate monetory score 
+  1.Sort the list of customerid in ascending order of menotory 
+  2. Calculate the M score according to 20%
+  (For example, the top is 1 points, the bottom is 5 point )
 , rfm_score as 
 (
 select * 
@@ -30,6 +42,7 @@ select *
     ,  if(percent_recency <= 0.2,5,if(percent_recency <= 0.4,4,if(percent_recency <= 0.6,3,if(percent_recency<=0.8,2,1)))) r_score  
     , if(percent_monetory <= 0.2,1,if(percent_monetory <= 0.4,2,if(percent_monetory <= 0.6,3,if(percent_monetory<=0.8,4,5)))) m_score 
 from percent_rank_cus )
+  -- Building 3D RFM Matrix
 select * 
 , (f_score + r_score + m_score)/3  cus_score 
 , case
@@ -48,5 +61,17 @@ select *
     else 'Not Define' end segment 
 from rfm_score
 order by monetory desc 
-
+---------------
+	Customers are clustered into the following segments:
+			- Lost (lowest recency, frequency, and monetary value score)
+			- Hibernating (last purchase long ago, low spending, and number of orders)
+			- Can’t Lose Them (high and frequent purchases, but have not returned for a long time)
+			- At Risk (spent a considerable amount and often, but not recently)
+			- About to Sleep (below average recency, frequency,and monetary value)
+			- Needing Attention (above average recency, frequency, and monetary value)
+			- Promising (recent shoppers, but haven’t spent much)
+			- Recent (bought most recently active, but not much)
+			- Potentially Loyal (recent customers, spent a fair amount more than once)
+			- Loyal (Active, spend good money often and are responsive to promotions)
+			- Champions (your best customers, bought recently often and spent the most)
 

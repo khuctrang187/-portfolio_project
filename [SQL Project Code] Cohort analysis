@@ -1,11 +1,11 @@
 -- Explore online retail data
 select * from `formal-cabinet-362516.data_sale.online_retail`
 limit 10
--- Check missing data
+-- Check and clean missing data
 select * from `formal-cabinet-362516.data_sale.online_retail`
 where customerid is null
--- 
-with sale as
+Notes : the min for unit price = 0 and quantity = 0 
+with sale_data as
 (
 select customerid cusid 
   , date(invoicedate) order_date 
@@ -15,15 +15,17 @@ where customerid is not null
 and quantity > 0
 and unitprice > 0 
 )
+-- created cohort group :  A string representation of the the year and month of a customer’s first purchase
 , min_ord as 
 ( 
 select 
   cusid
-  ,min(order_date) first_ord_date 
+  , min(order_date) first_ord_date 
 from sale 
 group by cusid 
 )
--- , cohort_analysis as
+-- created cohort analysis 
+-- Active customer and avg quantity 
   select
     format_date('%Y-%m',first_ord_date) cohort_month
     , month_range cohort_index
@@ -36,11 +38,45 @@ group by cusid
       , first_ord_date
       , order_date
       , date_diff(order_date, first_ord_date, month) month_range
-      , sale.quantity 
+      , sale_data.quantity 
     from min_ord
-    join sale on min_ord.cusid = sale.cusid
+    join sale_data on min_ord.cusid = sale_data.cusid
     order by min_ord.cusid  
   )  
   group by cohort_month, cohort_index
   order by cohort_month desc 
+-- retention customer rate
+, detail as 
+(
+select * 
+  , row_number() over (partition by first_ord_date order by ord_date ) rn
+from 
+(
+    select 
+      -- count(distinct cusid ) count_cusid 
+       format_date('%Y-%m',first_ord_date) first_ord_date
+      , format_date('%Y-%m',ord_date) ord_date 
+      , month_range 
+      , count(distinct cusid ) count_cusid
+    from 
+    (  
+       select 
+        min_ord.*
+        , ord_date
+        , date_diff(ord_date, first_ord_date, month) month_range
+      from min_ord
+      join sale_data on min_ord.cusid = sale_data.cusid
+      -- group by first_ord_date, ord_date
+    )
+    group by first_ord_date
+      , ord_date
+      , month_range )) 
+select 
+    d1.*
+  , d2.count_cusid 
+  , d1.count_cusid / d2.count_cusid percent 
+from detail d1 
+join detail d2 on d1.first_ord_date = d2.first_ord_date 
+where d2.rn =1 
+order by d1.first_ord_date
 
